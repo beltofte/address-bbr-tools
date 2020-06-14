@@ -1,0 +1,52 @@
+#!/usr/bin/env php -d memory_limit=2048M
+<?php
+
+set_time_limit(0);
+date_default_timezone_set('Europe/Copenhagen');
+
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Exception\RuntimeException;
+use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\Dotenv\Dotenv;
+use Symfony\Component\Dotenv\Exception\FormatException;
+use Symfony\Component\Dotenv\Exception\PathException;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+/**
+ * Load any .env file. See /.env.example.
+ */
+$envFolder = dirname(__DIR__, 1);
+$dotenv = new Dotenv();
+
+try {
+    $dotenv->loadEnv($envFolder . '/.env');
+}
+catch (PathException $e) {
+    var_dump($e->getMessage());
+}
+catch (FormatException $e) {
+    var_dump($e->getMessage());
+}
+
+// Require service configuration - needs to be required after environment config.
+require dirname(__DIR__) . '/config/services.php';
+
+// Start application.
+$application = new Application('Address / BBR Tools');
+
+// Abort if $container is not set.
+if (!isset($container)) {
+    throw new RuntimeException('Container not loaded!');
+}
+
+// Get all `command` services from container.
+$services = $container->findTaggedServiceIds('console.command');
+
+foreach ($services as $key => $params) {
+    $application->add($container->get($key));
+}
+
+// Execute application.
+$application->run();
