@@ -12,6 +12,7 @@ $container->register('dawa', 'App\dawa')
 // List of available console commands.
 $commands = [
     'dawa.exportbbrdata' => 'App\Command\DawaExportBbrData',
+    'dawa.exportbbrvacationhousedata' => 'App\Command\DawaExportBbrVacationHouseData',
     'helloworld' => 'App\Command\HelloWorld',
 ];
 
