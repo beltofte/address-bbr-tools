@@ -67,10 +67,11 @@ class DawaExportBbrVacationHouseData extends DawaBaseCommand
         $houseNumberTo = $input->getArgument('house-number-to');
 
         $query = [
-          'kommunekode' => $municipalityCode,
-          'vejkode' => $streetCode,
-          'husnrfra' => $houseNumberFrom,
-          'husnrtil' => $houseNumberTo
+            'kommunekode' => $municipalityCode,
+            'vejkode' => $streetCode,
+            'husnrfra' => $houseNumberFrom,
+            'husnrtil' => $houseNumberTo,
+            'struktur' => 'flad'
         ];
         $addressResults = $this->dawa->request('adgangsadresser', $query);
 
@@ -82,73 +83,74 @@ class DawaExportBbrVacationHouseData extends DawaBaseCommand
                 // Get building.
                 $buildingResults = $this->dawa->request('bbrlight/bygninger', ['adgangsadresseid' => $accessAdressId]);
 
-                //var_dump($buildingResults); exit;
-
                 if (!empty($buildingResults)) {
                     $primaryBuilding = null;
                     $annexeBuilding = null;
                     $carportBuilding = null;
 
                     foreach ($buildingResults as $buildingResult) {
-                        if ($buildingResult->Bygningsnr == "1") {
-                            $primaryBuilding = $buildingResult;
-                        }
-                        else {
-                            switch ($buildingResult->BYG_ANVEND_KODE) {
-                                case 910:
-                                case 920:
-                                    $carportBuilding = $buildingResult;
-                                    break;
-                                case 930:
-                                    $annexeBuilding = $buildingResult;
-                                    break;
-                            }
+                        switch ($buildingResult->BYG_ANVEND_KODE) {
+                            case 510:
+                                $primaryBuilding = $buildingResult;
+                                break;
+                            case 910:
+                            case 920:
+                                $carportBuilding = $buildingResult;
+                                break;
+                            case 585:
+                            case 930:
+                                $annexeBuilding = $buildingResult;
+                                break;
+                            default:
+                                var_dump($buildingResult->BYG_ANVEND_KODE);
                         }
                     }
 
-                    $buildingId = $primaryBuilding->Bygning_id;
+                    if (!empty($primaryBuilding)) {
+                        $buildingId = $primaryBuilding->Bygning_id;
 
-                    // Get floors.
-                    $floorResults = $this->dawa->request('bbrlight/etager', ['bygningsid' => $buildingId]);
+                        // Get floors.
+                        $floorResults = $this->dawa->request('bbrlight/etager', ['bygningsid' => $buildingId]);
 
-                    if (!empty($floorResults)) {
-                        $totalBasementArea = 0;
-                        foreach ($floorResults as $floorResult) {
-                            if ($floorResult->Etagebetegn == 'KL') {
-                                $totalBasementArea = $floorResult->SamletAreal;
-                                break;
+                        if (!empty($floorResults)) {
+                            $totalBasementArea = 0;
+                            foreach ($floorResults as $floorResult) {
+                                if ($floorResult->Etagebetegn == 'KL') {
+                                    $totalBasementArea = $floorResult->SamletAreal;
+                                    break;
+                                }
                             }
+
+                            // Get land.
+                            $landResult = $this->dawa->request(
+                                "jordstykker/{$address->ejerlavkode}/{$address->matrikelnr}"
+                            );
+
+                            // Get owner data.
+                            $ownerData = $this->getOwnerData($municipalityCode, $accessAdressEsre);
+
+                            $this->setData(
+                                $accessAdressId,
+                                $address->vejnavn,
+                                $address->husnr,
+                                $primaryBuilding->BYG_ANVEND_KODE,
+                                $primaryBuilding->OPFOERELSE_AAR,
+                                $primaryBuilding->OMBYG_AAR,
+                                $primaryBuilding->BYG_BOLIG_ARL_SAML,
+                                $totalBasementArea,
+                                $landResult->registreretareal,
+                                $annexeBuilding ? $annexeBuilding->BYG_BEBYG_ARL : null,
+                                $annexeBuilding ? $annexeBuilding->OPFOERELSE_AAR : null,
+                                $annexeBuilding ? $annexeBuilding->OMBYG_AAR : null,
+                                $carportBuilding ? $carportBuilding->BYG_BEBYG_ARL : null,
+                                $carportBuilding ? $carportBuilding->OPFOERELSE_AAR : null,
+                                $carportBuilding ? $carportBuilding->OMBYG_AAR : null,
+                                $ownerData['deed_date'] ? $ownerData['deed_date'] : '',
+                                $ownerData['sales_price'] ? $ownerData['sales_price'] : 0,
+                                $ownerData['sales_date'] ? $ownerData['sales_date'] : '',
+                                $address->matrikelnr
+                            );
                         }
-
-                        // Get land.
-                        $landResult = $this->dawa->request(
-                            "jordstykker/{$address->ejerlav->kode}/{$address->matrikelnr}"
-                        );
-
-                        // Get owner data.
-                        $ownerData = $this->getOwnerData($municipalityCode, $accessAdressEsre);
-
-                        $this->setData(
-                            $accessAdressId,
-                            $address->vejstykke->navn,
-                            $address->husnr,
-                            $primaryBuilding->BYG_ANVEND_KODE,
-                            $primaryBuilding->OPFOERELSE_AAR,
-                            $primaryBuilding->OMBYG_AAR,
-                            $primaryBuilding->BYG_BOLIG_ARL_SAML,
-                            $totalBasementArea,
-                            $landResult->registreretareal,
-                            $annexeBuilding ? $annexeBuilding->BYG_BEBYG_ARL : null,
-                            $annexeBuilding ? $annexeBuilding->OPFOERELSE_AAR : null,
-                            $annexeBuilding ? $annexeBuilding->OMBYG_AAR : null,
-                            $carportBuilding ? $carportBuilding->BYG_BEBYG_ARL : null,
-                            $carportBuilding ? $carportBuilding->OPFOERELSE_AAR : null,
-                            $carportBuilding ? $carportBuilding->OMBYG_AAR : null,
-                            $ownerData['deed_date'] ? $ownerData['deed_date'] : '',
-                            $ownerData['sales_price'] ? $ownerData['sales_price'] : 0,
-                            $ownerData['sales_date'] ? $ownerData['sales_date'] : '',
-                            $address->matrikelnr
-                        );
                     }
                 }
             }
@@ -244,13 +246,23 @@ class DawaExportBbrVacationHouseData extends DawaBaseCommand
         if (!empty($htmlData)) {
             // Deed date.
             if (strpos($htmlData, 'Skødedato') !== false) {
-                $crawler = new Crawler($htmlData);
-                $parentTag = $crawler->filter('p a[aria-controls="collapse3256"]')->parents();
-                $textContent = $parentTag->text();
+                preg_match('/aria-controls="collapse(.*?)256"/', $htmlData, $matches);
+                $filterId = 'collapse3256';
+                if (!empty($matches[1])) {
+                    $filterId = "collapse{$matches[1]}256";
+                }
 
-                // Extract deed date from text content.
-                if (preg_match('/\d{2}-\d{2}-\d{4}/', $textContent,$matches)) {
-                    $returnData['deed_date'] = $matches[0];
+                $crawler = new Crawler($htmlData);
+                try {
+                    $parentTag = $crawler->filter('p a[aria-controls="' . $filterId . '"]')->parents();
+                    $textContent = $parentTag->text();
+
+                    // Extract deed date from text content.
+                    if (preg_match('/\d{2}-\d{2}-\d{4}/', $textContent,$matches)) {
+                        $returnData['deed_date'] = $matches[0];
+                    }
+                }
+                catch (\Exception $exception) {
                 }
             }
 
