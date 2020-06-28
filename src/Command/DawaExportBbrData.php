@@ -121,7 +121,9 @@ class DawaExportBbrData extends DawaBaseCommand
                             $landResult->registreretareal,
                             $ownerData['deed_date'] ? $ownerData['deed_date'] : '',
                             $ownerData['sales_price'] ? $ownerData['sales_price'] : 0,
-                            $ownerData['sales_date'] ? $ownerData['sales_date'] : ''
+                            $ownerData['sales_date'] ? $ownerData['sales_date'] : '',
+                            $ownerData['owner_type'],
+                            $ownerData['dead_owner']
                         );
                     }
                 }
@@ -129,7 +131,7 @@ class DawaExportBbrData extends DawaBaseCommand
         }
 
         // Output
-        $headers = ['Street Name', 'House No', 'Construction Year', 'Total Living Area', 'Total Basement Area', 'Total Ground Area', 'Deed Date', 'Sales Price', 'Sales Date'];
+        $headers = ['Street Name', 'House No', 'Construction Year', 'Total Living Area', 'Total Basement Area', 'Total Ground Area', 'Deed Date', 'Sales Price', 'Sales Date', 'Owner Type', 'Dead Owner'];
         $this->renderOutput($output, $outputFormat, $headers, $this->getData());
     }
 
@@ -143,7 +145,9 @@ class DawaExportBbrData extends DawaBaseCommand
         int $totalGroundArea,
         string $deedDate,
         int $salesPrice,
-        string $salesDate)
+        string $salesDate,
+        string $ownerType,
+        bool $deadOwner)
     {
         $this->data[$accessAdressId] = [
             'street_name' => $streetName,
@@ -154,7 +158,9 @@ class DawaExportBbrData extends DawaBaseCommand
             'total_ground_area' => $totalGroundArea,
             'deed_date' => $deedDate,
             'sales_price' => $salesPrice,
-            'sales_date' => $salesDate
+            'sales_date' => $salesDate,
+            'owner_type' => $ownerType,
+            'dead_owner' => $deadOwner,
         ];
     }
 
@@ -174,11 +180,21 @@ class DawaExportBbrData extends DawaBaseCommand
             'deed_date' => '',
             'sales_date' => '',
             'sales_price' => 0,
+            'owner_type' => 'Anden',
+            'dead_owner' => false,
         ];
 
         $htmlData = file_get_contents("https://boligejer.dk/ejendomsdata/0/10/0/{$esreNumber}%7C{$municipalityCode}");
 
         if (!empty($htmlData)) {
+            // Owner type.
+            if (strpos($htmlData, 'Privatpersoner eller interessentskab') !== false) {
+                $returnData['owner_type'] = 'Privatperson';
+            }
+            else if (strpos($htmlData, 'Alment boligselskab') !== false) {
+                $returnData['owner_type'] = 'Alment boligselskab';
+            }
+
             // Deed date.
             if (strpos($htmlData, 'Skødedato') !== false) {
                 $crawler = new Crawler($htmlData);
@@ -189,6 +205,14 @@ class DawaExportBbrData extends DawaBaseCommand
                 if (preg_match('/\d{2}-\d{2}-\d{4}/', $textContent,$matches)) {
                     $returnData['deed_date'] = $matches[0];
                 }
+            }
+
+            // Dead owner.
+            if (strpos($htmlData, 'Boet') !== false) {
+                $returnData['dead_owner'] = true;
+            }
+            else {
+                $returnData['dead_owner'] = false;
             }
 
             // Sales date and price.
